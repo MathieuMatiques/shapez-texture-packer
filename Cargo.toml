@@ -1,0 +1,18 @@
+[package]
+name = "texture-packer"
+version = "0.1.0"
+edition = "2024"
+exclude = ["index.node"]
+
+[lib]
+crate-type = ["cdylib"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+crunch = "0.5.3"
+image = { version = "0.25.9", default-features = false, features = ["rayon", "png"] }
+neon = { version = "1.1", features = ["napi-6"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+walkdir = "2.5.0"
