@@ -3,47 +3,12 @@ use image::{
     ImageReader, RgbaImage,
     imageops::{self, FilterType},
 };
-use std::{collections::BTreeMap, iter::zip, path::Path, time::Instant};
-// use std::io::prelude::*;
 use serde::{Deserialize, Serialize};
-// use std::process::{Command, Output};
+use std::{collections::BTreeMap, iter::zip, path::Path, time::Instant};
 use walkdir::WalkDir;
-
-// Use #[neon::export] to export Rust functions as JavaScript functions.
-// See more at: https://docs.rs/neon/latest/neon/attr.export.html
 
 #[neon::export]
 fn hello(source: String, dest: String, name: String, config: String) {
-    /*let hi = Command::new("java")
-        .args([
-            "-jar",
-            "../gulp/runnable-texturepacker.jar",
-            // format!("\"{source}\"").as_str(),
-            // format!("\"{dest}\"").as_str(),
-            // name.as_str(),
-            // format!("\"{config}\"").as_str(),
-            format!("{source}").as_str(),
-            format!("{dest}").as_str(),
-            name.as_str(),
-            format!("{config}").as_str(),
-        ])
-        .output();
-    // println!("{:?}", hi);
-    match hi {
-        Ok(Output {
-            stdout,
-            stderr,
-            status,
-        }) => {
-            println!(
-                "{}\n{}",
-                String::from_utf8(stdout).unwrap(),
-                String::from_utf8(stderr).unwrap()
-            );
-            "happy".to_string() + status.success().to_string().as_str()
-        }
-        Err(_) => "sad".to_string(),
-    }*/
     other(source, dest, name, config).unwrap()
 }
 
@@ -56,7 +21,7 @@ pub fn other(
     let start = Instant::now();
 
     let config: Config = serde_json::from_str(&std::fs::read_to_string(&config)?)?;
-    dbg!(&config);
+    // dbg!(&config);
     let sources = WalkDir::new(&source).into_iter().filter_map(|entry| {
         if let Ok(e) = entry
             && e.file_type().is_file()
@@ -99,8 +64,8 @@ pub fn other(
                 )
             });
         let packed = crunch::pack_into_po2(
-            // std::cmp::max(config.max_width, config.max_width) as usize,
-            4096, items,
+            std::cmp::max(config.max_width, config.max_height) as usize,
+            items,
         )
         .unwrap();
 
@@ -164,40 +129,7 @@ pub fn other(
                 item.rect.y as i64 + (config.padding_y / 2) as i64,
             );
         }
-        /*for path in sources {
-            let img = ImageReader::open(&path)?.decode()?;
-            let img = if let Some(rgba8) = img.as_rgba8() {
-                rgba8.to_owned()
-            } else {
-                img.to_rgba8()
-            };
-            let (trimmed, trimmed_loc_dims) = trim(&img);
-            // println!("{img:?}");
-            frames.insert(
-                path.strip_prefix(&source)
-                    .unwrap()
-                    .to_str()
-                    .unwrap()
-                    .to_owned(),
-                SpriteData {
-                    frame: LocationDimensions {
-                        x: 0,
-                        y: 0,
-                        w: trimmed_loc_dims.w,
-                        h: trimmed_loc_dims.h,
-                    },
-                    rotated: false,
-                    trimmed,
-                    sprite_source_size: trimmed_loc_dims,
-                    source_size: Dimensions {
-                        w: img.width(),
-                        h: img.height(),
-                    },
-                },
-            );
-        }*/
         let atlas_data = AtlasData { frames, meta };
-        // println!("{}", serde_json::to_string_pretty(&atlas_data)?);
         std::fs::write(
             Path::new(&dest).join(name.clone() + scale_suffix.as_str() + ".json"),
             serde_json::to_string(&atlas_data)?,
@@ -250,15 +182,6 @@ fn trim(img: &RgbaImage) -> (bool, LocationDimensions) {
     // 3. Calculate new dimensions
     let new_width = max_x - min_x + 1;
     let new_height = max_y - min_y + 1;
-    // (
-    //     false,
-    //     LocationDimensions {
-    //         x: 0,
-    //         y: 0,
-    //         w: img.width(),
-    //         h: img.height(),
-    //     },
-    // )
     (
         width != new_width || height != new_height,
         LocationDimensions {
@@ -270,29 +193,20 @@ fn trim(img: &RgbaImage) -> (bool, LocationDimensions) {
     )
 }
 
-// Use #[neon::main] to add additional behavior at module loading time.
-// See more at: https://docs.rs/neon/latest/neon/attr.main.html
-
-// #[neon::main]
-// fn main(_cx: ModuleContext) -> NeonResult<()> {
-//     println!("module is loaded!");
-//     Ok(())
-// }
-
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 struct Config {
     _pot: bool,
     padding_x: u32,
     padding_y: u32,
-    edge_padding: bool,
+    _edge_padding: bool,
     _rotation: bool,
     max_width: u32,
     max_height: u32,
     _use_indexes: bool,
     _alpha_threshold: u8,
-    strip_whitespace_x: bool,
-    strip_whitespace_y: bool,
+    _strip_whitespace_x: bool,
+    _strip_whitespace_y: bool,
     duplicate_padding: bool,
     _alias: bool,
     _fast: bool,
@@ -341,29 +255,3 @@ struct Dimensions {
     w: u32,
     h: u32,
 }
-
-// "sprites/belt/built/forward_1.png": {
-//   "frame": { "x": 512, "y": 476, "w": 116, "h": 144 },
-//   "rotated": false,
-//   "trimmed": true,
-//   "spriteSourceSize": { "x": 14, "y": 0, "w": 116, "h": 144 },
-//   "sourceSize": { "w": 144, "h": 144 }
-// }
-
-// {
-//   "frames": {
-//     "sprites/wires/wires_preview.png": {
-//       "frame": { "x": 1205, "y": 19, "w": 48, "h": 48 },
-//       "rotated": false,
-//       "trimmed": true,
-//       "spriteSourceSize": { "x": 0, "y": 0, "w": 48, "h": 48 },
-//       "sourceSize": { "w": 48, "h": 48 }
-//     }
-//   },
-//   "meta": {
-//     "image": "atlas0_hq.png",
-//     "format": "RGBA8888",
-//     "size": { "w": 2048, "h": 2048 },
-//     "scale": "0.75"
-//   }
-// }
