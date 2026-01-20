@@ -912,9 +912,11 @@ dependencies = [
 name = "texture-packer"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "crunch",
  "image",
  "neon",
+ "rayon",
  "serde",
  "serde_json",
  "walkdir",
