@@ -65,24 +65,13 @@ pub fn other(source: String, dest: String, name: String, config: String) -> anyh
             )
             .expect("Failed to pack");
 
-            let mut output = RgbaImage::new(packed.w as u32, packed.h as u32);
+            let processed_sprites: Vec<_> = packed
+                .items
+                .into_par_iter()
+                .map(|item| {
+                    let (ref img, trimmed, ref trimmed_loc_dims) = loaded_imgs[&item.data];
 
-            let meta = MetaData {
-                image: name.clone() + scale_suffix.as_str() + ".png",
-                format: "RGBA8888".to_owned(),
-                size: Dimensions {
-                    w: packed.w as u32,
-                    h: packed.h as u32,
-                },
-                scale: scale.to_string(),
-            };
-            let mut frames = BTreeMap::new();
-
-            for item in packed.items.into_iter() {
-                let (img, trimmed, trimmed_loc_dims) = loaded_imgs[&item.data].clone();
-                frames.insert(
-                    item.data,
-                    SpriteData {
+                    let sprite_data = SpriteData {
                         frame: LocationDimensions {
                             x: item.rect.x as u32 + config.padding_x / 2,
                             y: item.rect.y as u32 + config.padding_y / 2,
@@ -101,24 +90,33 @@ pub fn other(source: String, dest: String, name: String, config: String) -> anyh
                             w: (img.width() as f64 * scale).round() as u32,
                             h: (img.height() as f64 * scale).round() as u32,
                         },
-                    },
-                );
+                    };
 
-                let cropped = imageops::crop_imm(
-                    &img,
-                    trimmed_loc_dims.x,
-                    trimmed_loc_dims.y,
-                    trimmed_loc_dims.w,
-                    trimmed_loc_dims.h,
-                );
+                    let cropped = imageops::crop_imm(
+                        img,
+                        trimmed_loc_dims.x,
+                        trimmed_loc_dims.y,
+                        trimmed_loc_dims.w,
+                        trimmed_loc_dims.h,
+                    );
 
-                let downsized = imageops::resize(
-                    &cropped.to_image(),
-                    (trimmed_loc_dims.w as f64 * scale).round() as u32,
-                    (trimmed_loc_dims.h as f64 * scale).round() as u32,
-                    FilterType::Triangle,
-                );
+                    let downsized = imageops::resize(
+                        &cropped.to_image(),
+                        (trimmed_loc_dims.w as f64 * scale).round() as u32,
+                        (trimmed_loc_dims.h as f64 * scale).round() as u32,
+                        FilterType::Triangle,
+                    );
 
+                    (item, sprite_data, downsized)
+                })
+                .collect();
+
+            let mut output = RgbaImage::new(packed.w as u32, packed.h as u32);
+
+            let mut frames = BTreeMap::new();
+
+            for (item, sprite_data, downsized) in processed_sprites {
+                frames.insert(item.data, sprite_data);
                 imageops::replace(
                     &mut output,
                     &downsized,
@@ -126,6 +124,17 @@ pub fn other(source: String, dest: String, name: String, config: String) -> anyh
                     item.rect.y as i64 + (config.padding_y / 2) as i64,
                 );
             }
+
+            let meta = MetaData {
+                image: name.clone() + scale_suffix.as_str() + ".png",
+                format: "RGBA8888".to_owned(),
+                size: Dimensions {
+                    w: packed.w as u32,
+                    h: packed.h as u32,
+                },
+                scale: scale.to_string(),
+            };
+
             let atlas_data = AtlasData { frames, meta };
             std::fs::write(
                 Path::new(&dest).join(name.clone() + scale_suffix.as_str() + ".json"),
