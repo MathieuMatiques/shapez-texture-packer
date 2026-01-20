@@ -1,5 +1,5 @@
 {
-    "name": "texture-packer",
+    "name": "shapez-texture-packer",
     "version": "0.1.0",
     "main": "index.node",
     "private": true,
