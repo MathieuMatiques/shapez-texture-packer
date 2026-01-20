@@ -93,8 +93,8 @@ pub fn other(
             .map(|(key, (_, _, LocationDimensions { w, h, .. }))| {
                 Item::new(
                     key.clone(),
-                    (*w as f64 * scale).round() as usize,
-                    (*h as f64 * scale).round() as usize,
+                    (*w as f64 * scale).round() as usize + config.padding_x as usize,
+                    (*h as f64 * scale).round() as usize + config.padding_y as usize,
                     Rotation::None,
                 )
             });
@@ -122,10 +122,10 @@ pub fn other(
                 item.data,
                 SpriteData {
                     frame: LocationDimensions {
-                        x: item.rect.x as u32,
-                        y: item.rect.y as u32,
-                        w: item.rect.w as u32,
-                        h: item.rect.h as u32,
+                        x: item.rect.x as u32 + config.padding_x / 2,
+                        y: item.rect.y as u32 + config.padding_y / 2,
+                        w: (trimmed_loc_dims.w as f64 * scale).round() as u32,
+                        h: (trimmed_loc_dims.h as f64 * scale).round() as u32,
                     },
                     rotated: false,
                     trimmed,
@@ -152,19 +152,17 @@ pub fn other(
 
             let downsized = imageops::resize(
                 &cropped.to_image(),
-                item.rect.w as u32,
-                item.rect.h as u32,
-                FilterType::Nearest,
+                (trimmed_loc_dims.w as f64 * scale).round() as u32,
+                (trimmed_loc_dims.h as f64 * scale).round() as u32,
+                FilterType::Triangle,
             );
 
             imageops::replace(
                 &mut output,
                 &downsized,
-                item.rect.x as i64,
-                item.rect.y as i64,
+                item.rect.x as i64 + (config.padding_x / 2) as i64,
+                item.rect.y as i64 + (config.padding_y / 2) as i64,
             );
-
-            // TODO: write output image
         }
         /*for path in sources {
             let img = ImageReader::open(&path)?.decode()?;
