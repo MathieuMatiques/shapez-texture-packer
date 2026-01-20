@@ -1,6 +1,9 @@
 use crunch::{Item, Rotation};
-use image::{ImageReader, RgbaImage};
-use std::{collections::BTreeMap, fs::File, path::Path, time::Instant};
+use image::{
+    ImageReader, RgbaImage,
+    imageops::{self, FilterType},
+};
+use std::{collections::BTreeMap, iter::zip, path::Path, time::Instant};
 // use std::io::prelude::*;
 use serde::{Deserialize, Serialize};
 // use std::process::{Command, Output};
@@ -84,88 +87,125 @@ pub fn other(
         })
         .collect();
 
-    let packed = crunch::pack_into_po2(
-        // std::cmp::max(config.max_width, config.max_width) as usize,
-        4096,
-        loaded_imgs
+    for (scale, scale_suffix) in zip(config.scale, config.scale_suffix) {
+        let items = loaded_imgs
             .iter()
             .map(|(key, (_, _, LocationDimensions { w, h, .. }))| {
-                Item::new(key.clone(), *w as usize, *h as usize, Rotation::None)
-            }),
-    )
-    .unwrap();
+                Item::new(
+                    key.clone(),
+                    (*w as f64 * scale).round() as usize,
+                    (*h as f64 * scale).round() as usize,
+                    Rotation::None,
+                )
+            });
+        let packed = crunch::pack_into_po2(
+            // std::cmp::max(config.max_width, config.max_width) as usize,
+            4096, items,
+        )
+        .unwrap();
 
-    let meta = MetaData {
-        image: name.clone() + config.scale_suffix[0].as_str() + ".png",
-        format: "RGBA8888".to_owned(),
-        size: Dimensions {
-            w: packed.w as u32,
-            h: packed.h as u32,
-        },
-        scale: config.scale[0].to_string(),
-    };
-    let mut frames = BTreeMap::new();
-    for item in packed.items.into_iter() {
-        let (img, trimmed, trimmed_loc_dims) = loaded_imgs[&item.data].clone();
-        frames.insert(
-            item.data,
-            SpriteData {
-                frame: LocationDimensions {
-                    x: item.rect.x as u32,
-                    y: item.rect.y as u32,
-                    w: item.rect.w as u32,
-                    h: item.rect.h as u32,
-                },
-                rotated: false,
-                trimmed,
-                sprite_source_size: trimmed_loc_dims,
-                source_size: Dimensions {
-                    w: img.width(),
-                    h: img.height(),
-                },
+        let mut output = RgbaImage::new(packed.w as u32, packed.h as u32);
+
+        let meta = MetaData {
+            image: name.clone() + scale_suffix.as_str() + ".png",
+            format: "RGBA8888".to_owned(),
+            size: Dimensions {
+                w: packed.w as u32,
+                h: packed.h as u32,
             },
-        );
-        // TODO: write output image
-    }
-    /*for path in sources {
-        let img = ImageReader::open(&path)?.decode()?;
-        let img = if let Some(rgba8) = img.as_rgba8() {
-            rgba8.to_owned()
-        } else {
-            img.to_rgba8()
+            scale: scale.to_string(),
         };
-        let (trimmed, trimmed_loc_dims) = trim(&img);
-        // println!("{img:?}");
-        frames.insert(
-            path.strip_prefix(&source)
-                .unwrap()
-                .to_str()
-                .unwrap()
-                .to_owned(),
-            SpriteData {
-                frame: LocationDimensions {
-                    x: 0,
-                    y: 0,
-                    w: trimmed_loc_dims.w,
-                    h: trimmed_loc_dims.h,
+        let mut frames = BTreeMap::new();
+        for item in packed.items.into_iter() {
+            let (img, trimmed, trimmed_loc_dims) = loaded_imgs[&item.data].clone();
+            frames.insert(
+                item.data,
+                SpriteData {
+                    frame: LocationDimensions {
+                        x: item.rect.x as u32,
+                        y: item.rect.y as u32,
+                        w: item.rect.w as u32,
+                        h: item.rect.h as u32,
+                    },
+                    rotated: false,
+                    trimmed,
+                    sprite_source_size: LocationDimensions {
+                        x: (trimmed_loc_dims.x as f64 * scale).round() as u32,
+                        y: (trimmed_loc_dims.y as f64 * scale).round() as u32,
+                        w: (trimmed_loc_dims.w as f64 * scale).round() as u32,
+                        h: (trimmed_loc_dims.h as f64 * scale).round() as u32,
+                    },
+                    source_size: Dimensions {
+                        w: (img.width() as f64 * scale).round() as u32,
+                        h: (img.height() as f64 * scale).round() as u32,
+                    },
                 },
-                rotated: false,
-                trimmed,
-                sprite_source_size: trimmed_loc_dims,
-                source_size: Dimensions {
-                    w: img.width(),
-                    h: img.height(),
-                },
-            },
-        );
-    }*/
-    let atlas_data = AtlasData { frames, meta };
-    // println!("{}", serde_json::to_string_pretty(&atlas_data)?);
-    std::fs::write(
-        name + config.scale_suffix[0].as_str() + ".json",
-        serde_json::to_string(&atlas_data)?,
-    )?;
+            );
 
+            let cropped = imageops::crop_imm(
+                &img,
+                trimmed_loc_dims.x,
+                trimmed_loc_dims.y,
+                trimmed_loc_dims.w,
+                trimmed_loc_dims.h,
+            );
+
+            let downsized = imageops::resize(
+                &cropped.to_image(),
+                item.rect.w as u32,
+                item.rect.h as u32,
+                FilterType::Nearest,
+            );
+
+            imageops::replace(
+                &mut output,
+                &downsized,
+                item.rect.x as i64,
+                item.rect.y as i64,
+            );
+
+            // TODO: write output image
+        }
+        /*for path in sources {
+            let img = ImageReader::open(&path)?.decode()?;
+            let img = if let Some(rgba8) = img.as_rgba8() {
+                rgba8.to_owned()
+            } else {
+                img.to_rgba8()
+            };
+            let (trimmed, trimmed_loc_dims) = trim(&img);
+            // println!("{img:?}");
+            frames.insert(
+                path.strip_prefix(&source)
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .to_owned(),
+                SpriteData {
+                    frame: LocationDimensions {
+                        x: 0,
+                        y: 0,
+                        w: trimmed_loc_dims.w,
+                        h: trimmed_loc_dims.h,
+                    },
+                    rotated: false,
+                    trimmed,
+                    sprite_source_size: trimmed_loc_dims,
+                    source_size: Dimensions {
+                        w: img.width(),
+                        h: img.height(),
+                    },
+                },
+            );
+        }*/
+        let atlas_data = AtlasData { frames, meta };
+        // println!("{}", serde_json::to_string_pretty(&atlas_data)?);
+        std::fs::write(
+            Path::new(&dest).join(name.clone() + scale_suffix.as_str() + ".json"),
+            serde_json::to_string(&atlas_data)?,
+        )?;
+        output.save(Path::new(&dest).join(name.clone() + scale_suffix.as_str() + ".png"))?;
+    }
     let end = Instant::now();
     println!("{:?}", end - start);
 
@@ -173,13 +213,61 @@ pub fn other(
 }
 
 fn trim(img: &RgbaImage) -> (bool, LocationDimensions) {
+    let (width, height) = img.dimensions();
+    let mut min_x = width;
+    let mut min_y = height;
+    let mut max_x = 0;
+    let mut max_y = 0;
+    let mut found_pixel = false;
+
+    // 1. Scan for the bounding box of non-transparent pixels
+    for y in 0..height {
+        for x in 0..width {
+            let pixel = img.get_pixel(x, y);
+
+            // Check alpha channel (index 3). 0 is fully transparent.
+            if pixel.0[3] > 0 {
+                if x < min_x {
+                    min_x = x;
+                }
+                if x > max_x {
+                    max_x = x;
+                }
+                if y < min_y {
+                    min_y = y;
+                }
+                if y > max_y {
+                    max_y = y;
+                }
+                found_pixel = true;
+            }
+        }
+    }
+
+    // 2. Handle fully transparent images (return a 1x1 empty view at 0,0)
+    if !found_pixel {
+        panic!("all transparent!");
+    }
+
+    // 3. Calculate new dimensions
+    let new_width = max_x - min_x + 1;
+    let new_height = max_y - min_y + 1;
+    // (
+    //     false,
+    //     LocationDimensions {
+    //         x: 0,
+    //         y: 0,
+    //         w: img.width(),
+    //         h: img.height(),
+    //     },
+    // )
     (
-        false,
+        width != new_width || height != new_height,
         LocationDimensions {
-            x: 0,
-            y: 0,
-            w: img.width(),
-            h: img.height(),
+            x: min_x,
+            y: min_y,
+            w: new_width,
+            h: new_height,
         },
     )
 }
@@ -196,7 +284,7 @@ fn trim(img: &RgbaImage) -> (bool, LocationDimensions) {
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 struct Config {
-    pot: bool,
+    _pot: bool,
     padding_x: u32,
     padding_y: u32,
     edge_padding: bool,
