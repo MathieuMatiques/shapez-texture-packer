@@ -1,6 +1,6 @@
 [package]
-name = "texture-packer"
-version = "0.1.0"
+name = "shapez-texture-packer"
+version = "0.1.1"
 edition = "2024"
 exclude = ["index.node"]
 
@@ -25,8 +25,8 @@ walkdir = "2.5"
 
 [profile.release]
 # debug = true
-strip = true
-panic = "abort" # Aborts the process immediately on panic, no unwinding
-lto = true      # Enable Link Time Optimization
-codegen-units = 1 # Maximize optimizations
+# strip = true
+# panic = "abort" # Aborts the process immediately on panic, no unwinding
+# lto = true      # Enable Link Time Optimization
+# codegen-units = 1 # Maximize optimizations
 # opt-level = "z"
