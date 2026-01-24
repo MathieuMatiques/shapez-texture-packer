@@ -1,7 +1,6 @@
 {
   "name": "@shapez-test/texture-packer",
   "version": "1.0.0",
-  "description": "Template project for writing node package with napi-rs",
   "main": "index.js",
   "repository": {
     "type": "git",
@@ -9,14 +8,6 @@
   },
   "license": "GPL3",
   "browser": "browser.js",
-  "keywords": [
-    "napi-rs",
-    "NAPI",
-    "N-API",
-    "Rust",
-    "node-addon",
-    "node-addon-api"
-  ],
   "files": [
     "index.d.ts",
     "index.js",
@@ -58,5 +49,6 @@
     "@tybys/wasm-util": "^0.10.0",
     "chalk": "^5.6.2",
     "typescript": "^5.9.2"
-  }
+  },
+  "type": "module"
 }
