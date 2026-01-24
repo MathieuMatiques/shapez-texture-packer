@@ -38,8 +38,7 @@
         "build": "napi build --platform --release",
         "build:debug": "napi build --platform",
         "prepublishOnly": "napi prepublish -t npm",
-        "preversion": "napi build --platform && git add .",
-        "postversion": "napi version"
+        "version": "napi build --platform && git add ."
     },
     "devDependencies": {
         "@emnapi/core": "^1.5.0",
