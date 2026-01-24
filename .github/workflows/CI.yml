@@ -128,13 +128,18 @@ jobs:
               shell: bash
             - name: Publish
               run: |
+                  echo "registry=https://registry.npmjs.org/" > .npmrc
+                  echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> .npmrc
+                  # Enable provenance if you're using it (requires the id-token: write permission you already have)
+                  npm config set provenance true
+
                   if git log -1 --pretty=%B | grep "^v[0-9]\+\.[0-9]\+\.[0-9]\+$";
                   then
-                    echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" >> .npmrc
+                    # echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" >> .npmrc
                     npm publish --access public
                   elif git log -1 --pretty=%B | grep "^v[0-9]\+\.[0-9]\+\.[0-9]\+";
                   then
-                    echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" >> .npmrc
+                    # echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" >> .npmrc
                     npm publish --tag next --access public
                   else
                     echo "Not a release, skipping publish"
