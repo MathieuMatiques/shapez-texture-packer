@@ -35,10 +35,10 @@
     },
     "scripts": {
         "artifacts": "bunx napi artifacts",
-        "build": "bunx napi build --platform --release",
-        "build:debug": "bunx napi build --platform",
+        "build": "bunx napi build --esm --platform --release",
+        "build:debug": "bunx napi build --esm --platform",
         "prepublishOnly": "bunx napi prepublish -t npm",
-        "version": "bunx napi build --platform && git add ."
+        "version": "bunx napi build --esm --platform && git add ."
     },
     "devDependencies": {
         "@emnapi/core": "^1.5.0",
