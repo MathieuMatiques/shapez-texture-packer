@@ -37,8 +37,8 @@
         "artifacts": "bunx napi artifacts",
         "build": "bunx napi build --platform --release",
         "build:debug": "bunx napi build --platform",
-        "prepublishOnly": "bunx napi prepublish -t npm",
-        "version": "bunx napi build --platform && git add ."
+        "prepublishOnly": "napi prepublish -t npm",
+        "version": "napi build --platform && git add ."
     },
     "devDependencies": {
         "@emnapi/core": "^1.5.0",
