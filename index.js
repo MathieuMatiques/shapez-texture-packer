@@ -577,4 +577,3 @@ if (!nativeBinding) {
 
 module.exports = nativeBinding
 module.exports.hello = nativeBinding.hello
-module.exports.hello = nativeBinding.hello

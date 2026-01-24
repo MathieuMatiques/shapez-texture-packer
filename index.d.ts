@@ -9,15 +9,4 @@ export interface Config {
   scaleSuffix: Array<string>
 }
 
-export interface Config {
-  paddingX: number
-  paddingY: number
-  maxWidth: number
-  maxHeight: number
-  scale: Array<number>
-  scaleSuffix: Array<string>
-}
-
-export declare function hello(source: string, dest: string, name: string, config: Config): void
-
 export declare function hello(source: string, dest: string, name: string, config: Config): void
