@@ -1,21 +1,54 @@
 {
-    "name": "shapez-texture-packer",
-    "version": "0.1.4",
-    "main": "index.node",
-    "private": true,
-    "scripts": {
-        "test": "cargo test",
-        "cargo-build": "cargo build --message-format=json-render-diagnostics > cargo.log",
-        "cross-build": "cross build --message-format=json-render-diagnostics > cross.log",
-        "postcargo-build": "npx @neon-rs/cli dist < cargo.log",
-        "postcross-build": "npx @neon-rs/cli dist -m /target < cross.log",
-        "debug": "npm run cargo-build --",
-        "build": "npm run cargo-build -- --release",
-        "cross": "npm run cross-build -- --release",
-        "postinstall": "npm run build"
-    },
-    "type": "module",
-    "devDependencies": {
-        "@neon-rs/cli": "0.1.82"
-    }
+  "name": "@shapez-test/texture-packer",
+  "version": "1.0.0",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/MathieuMatiques/shapez-texture-packer.git"
+  },
+  "license": "GPL3",
+  "browser": "browser.js",
+  "files": [
+    "index.d.ts",
+    "index.js",
+    "browser.js"
+  ],
+  "napi": {
+    "binaryName": "texture-packer",
+    "targets": [
+      "x86_64-pc-windows-msvc",
+      "x86_64-apple-darwin",
+      "x86_64-unknown-linux-gnu",
+      "x86_64-unknown-linux-musl",
+      "aarch64-unknown-linux-gnu",
+      "aarch64-apple-darwin",
+      "aarch64-unknown-linux-musl",
+      "aarch64-pc-windows-msvc"
+    ]
+  },
+  "engines": {
+    "node": ">= 12.22.0 < 13 || >= 14.17.0 < 15 || >= 15.12.0 < 16 || >= 16.0.0"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  },
+  "scripts": {
+    "artifacts": "napi artifacts",
+    "build": "napi build --platform --release",
+    "build:debug": "napi build --platform",
+    "prepublishOnly": "napi prepublish -t npm",
+    "preversion": "napi build --platform && git add .",
+    "version": "napi version"
+  },
+  "devDependencies": {
+    "@emnapi/core": "^1.5.0",
+    "@emnapi/runtime": "^1.5.0",
+    "@napi-rs/cli": "^3.2.0",
+    "@oxc-node/core": "^0.0.35",
+    "@tybys/wasm-util": "^0.10.0",
+    "chalk": "^5.6.2",
+    "typescript": "^5.9.2"
+  },
+  "type": "module"
 }

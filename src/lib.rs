@@ -1,61 +1,64 @@
-#![feature(iterator_try_collect)]
+// #![feature(iterator_try_collect)]
 use crunch::{Item, Rotation};
 use image::{
     ImageReader, RgbaImage,
     imageops::{self, FilterType},
 };
 use nanoserde::SerJson;
-use neon::{
-    handle::Handle,
-    object::Object,
-    prelude::FunctionContext,
-    result::NeonResult,
-    types::{JsArray, JsNumber, JsObject, JsString, Value},
-};
+// use neon::{
+//     handle::Handle,
+//     object::Object,
+//     prelude::FunctionContext,
+//     result::NeonResult,
+//     types::{JsArray, JsNumber, JsObject, JsString, Value},
+// };
+use napi_derive::napi;
 use rayon::prelude::*;
 // use orx_parallel::*;
 // use serde::Serialize;
-use std::{collections::BTreeMap, path::Path, time::Instant};
+use std::{collections::BTreeMap, path::Path};
 use walkdir::WalkDir;
 
-#[neon::export]
+// #[neon::export]
+#[napi]
 fn hello(
-    cx: &mut FunctionContext,
+    // cx: &mut FunctionContext,
     source: String,
     dest: String,
     name: String,
-    config: Handle<JsObject>,
-) -> NeonResult<()> {
-    let config = Config {
-        padding_x: config.prop(cx, "paddingX").get::<f64>()? as u32,
-        padding_y: config.prop(cx, "paddingY").get::<f64>()? as u32,
-        max_width: config.prop(cx, "maxWidth").get::<f64>()? as u32,
-        max_height: config.prop(cx, "maxHeight").get::<f64>()? as u32,
-        scale: config
-            .prop(cx, "scale")
-            .get::<Handle<JsArray>>()?
-            .to_vec(cx)?
-            .iter()
-            .map(|val| {
-                val.downcast::<JsNumber, _>(cx)
-                    .map(|string| string.value(cx))
-            })
-            .try_collect()
-            .unwrap(),
-        scale_suffix: config
-            .prop(cx, "scaleSuffix")
-            .get::<Handle<JsArray>>()?
-            .to_vec(cx)?
-            .iter()
-            .map(|val| {
-                val.downcast::<JsString, _>(cx)
-                    .map(|string| string.value(cx))
-            })
-            .try_collect()
-            .unwrap(),
-    };
+    // config: Handle<JsObject>,
+    config: Config,
+)  {
+    // let config = Config {
+    //     padding_x: config.prop(cx, "paddingX").get::<f64>()? as u32,
+    //     padding_y: config.prop(cx, "paddingY").get::<f64>()? as u32,
+    //     max_width: config.prop(cx, "maxWidth").get::<f64>()? as u32,
+    //     max_height: config.prop(cx, "maxHeight").get::<f64>()? as u32,
+    //     scale: config
+    //         .prop(cx, "scale")
+    //         .get::<Handle<JsArray>>()?
+    //         .to_vec(cx)?
+    //         .iter()
+    //         .map(|val| {
+    //             val.downcast::<JsNumber, _>(cx)
+    //                 .map(|string| string.value(cx))
+    //         })
+    //         .try_collect()
+    //         .unwrap(),
+    //     scale_suffix: config
+    //         .prop(cx, "scaleSuffix")
+    //         .get::<Handle<JsArray>>()?
+    //         .to_vec(cx)?
+    //         .iter()
+    //         .map(|val| {
+    //             val.downcast::<JsString, _>(cx)
+    //                 .map(|string| string.value(cx))
+    //         })
+    //         .try_collect()
+    //         .unwrap(),
+    // };
     other(source, dest, name, config).unwrap();
-    Ok(())
+    // Ok(())
 }
 
 pub fn other(source: String, dest: String, name: String, config: Config) -> anyhow::Result<()> {
@@ -249,6 +252,7 @@ fn trim(img: &RgbaImage) -> (bool, LocationDimensions) {
 }
 
 #[derive(Debug)]
+#[napi(object)]
 // #[serde(rename_all = "camelCase")]
 pub struct Config {
     // _pot: bool,
