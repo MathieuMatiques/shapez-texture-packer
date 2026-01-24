@@ -128,8 +128,9 @@ jobs:
               shell: bash
             - name: Publish
               run: |
-                  echo "registry=https://registry.npmjs.org/" > .npmrc
-                  echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> .npmrc
+                  # echo "registry=https://registry.npmjs.org/" > .npmrc
+                  echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> ~/.npmrc
+                  npm config set registry https://registry.npmjs.org/
                   # Enable provenance if you're using it (requires the id-token: write permission you already have)
                   npm config set provenance true
 
