@@ -1,32 +1,26 @@
 [package]
-name = "shapez-texture-packer"
-version = "0.1.4"
 edition = "2024"
-exclude = ["index.node"]
+name = "texture_packer"
+version = "0.1.0"
 
 [lib]
 crate-type = ["cdylib"]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
-# anyhow = "1.0"
 anyhow = { version = "1.0", default-features = false }
 crunch = "0.5"
 image = { version = "0.25", default-features = false, features = ["png"] }
 nanoserde = { version = "0.2.1", default-features = false, features = ["json"] }
-neon = { version = "1.1", features = ["napi-6"] }
 # orx-parallel = "3.4.0"
-# par-iter = "2.0"
 rayon = "1.11"
-# serde = { version = "1.0", features = ["derive"] }
-# serde_json = "1.0"
 walkdir = "2.5"
+napi = "3.0.0"
+napi-derive = "3.0.0"
+fast_image_resize = { version = "6.0.0", features = ["image", "only_u8x4"] }
+
+[build-dependencies]
+napi-build = "2"
 
 [profile.release]
-# debug = true
-# strip = true
-# panic = "abort" # Aborts the process immediately on panic, no unwinding
-# lto = true      # Enable Link Time Optimization
-# codegen-units = 1 # Maximize optimizations
-# opt-level = "z"
+lto = true
+strip = "symbols"

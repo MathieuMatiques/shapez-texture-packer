@@ -1,68 +1,30 @@
-#![feature(iterator_try_collect)]
 use crunch::{Item, Rotation};
-use image::{
-    ImageReader, RgbaImage,
-    imageops::{self, FilterType},
-};
+use image::{ImageBuffer, ImageReader, RgbaImage, imageops};
 use nanoserde::SerJson;
-use neon::{
-    handle::Handle,
-    object::Object,
-    prelude::FunctionContext,
-    result::NeonResult,
-    types::{JsArray, JsNumber, JsObject, JsString, Value},
-};
+use napi_derive::napi;
 use rayon::prelude::*;
 // use orx_parallel::*;
-// use serde::Serialize;
-use std::{collections::BTreeMap, path::Path, time::Instant};
+use fast_image_resize::{
+    IntoImageView, PixelType, ResizeAlg, ResizeOptions, Resizer, images::Image, pixels::U8x4,
+};
+use std::{collections::BTreeMap, fs, path::Path};
 use walkdir::WalkDir;
 
-#[neon::export]
-fn hello(
-    cx: &mut FunctionContext,
-    source: String,
-    dest: String,
-    name: String,
-    config: Handle<JsObject>,
-) -> NeonResult<()> {
-    let config = Config {
-        padding_x: config.prop(cx, "paddingX").get::<f64>()? as u32,
-        padding_y: config.prop(cx, "paddingY").get::<f64>()? as u32,
-        max_width: config.prop(cx, "maxWidth").get::<f64>()? as u32,
-        max_height: config.prop(cx, "maxHeight").get::<f64>()? as u32,
-        scale: config
-            .prop(cx, "scale")
-            .get::<Handle<JsArray>>()?
-            .to_vec(cx)?
-            .iter()
-            .map(|val| {
-                val.downcast::<JsNumber, _>(cx)
-                    .map(|string| string.value(cx))
-            })
-            .try_collect()
-            .unwrap(),
-        scale_suffix: config
-            .prop(cx, "scaleSuffix")
-            .get::<Handle<JsArray>>()?
-            .to_vec(cx)?
-            .iter()
-            .map(|val| {
-                val.downcast::<JsString, _>(cx)
-                    .map(|string| string.value(cx))
-            })
-            .try_collect()
-            .unwrap(),
-    };
+#[napi]
+pub fn hello(source: String, dest: String, name: String, config: Config) {
     other(source, dest, name, config).unwrap();
-    Ok(())
 }
 
-pub fn other(source: String, dest: String, name: String, config: Config) -> anyhow::Result<()> {
+pub fn other<P: AsRef<Path> + Sync>(
+    source: P,
+    dest: P,
+    name: String,
+    config: Config,
+) -> anyhow::Result<()> {
+    fs::create_dir_all(&dest)?;
+
     // let start = Instant::now();
 
-    // let config: Config = serde_json::from_str(&std::fs::read_to_string(&config)?)?;
-    // dbg!(&config);
     let sources: Vec<_> = WalkDir::new(&source)
         .into_iter()
         .filter_map(|e| e.ok())
@@ -139,22 +101,39 @@ pub fn other(source: String, dest: String, name: String, config: Config) -> anyh
                         },
                     };
 
-                    let cropped = imageops::crop_imm(
-                        img,
-                        trimmed_loc_dims.x,
-                        trimmed_loc_dims.y,
-                        trimmed_loc_dims.w,
-                        trimmed_loc_dims.h,
-                    );
-
-                    let downsized = imageops::resize(
-                        &cropped.to_image(),
+                    let mut dst_image = Image::new(
                         scaled_trimmed_loc_dims.w,
                         scaled_trimmed_loc_dims.h,
-                        FilterType::Triangle,
+                        PixelType::U8x4,
                     );
+                    let mut resizer = Resizer::new();
+                    resizer
+                        .resize_typed(
+                            &img.image_view::<U8x4>().unwrap(),
+                            &mut dst_image.typed_image_mut().unwrap(),
+                            &ResizeOptions::new()
+                                .crop(
+                                    trimmed_loc_dims.x as f64,
+                                    trimmed_loc_dims.y as f64,
+                                    trimmed_loc_dims.w as f64,
+                                    trimmed_loc_dims.h as f64,
+                                )
+                                .resize_alg(ResizeAlg::Convolution(
+                                    fast_image_resize::FilterType::Bilinear,
+                                )),
+                        )
+                        .unwrap();
 
-                    (item.data, sprite_data, downsized)
+                    (
+                        item.data,
+                        sprite_data,
+                        ImageBuffer::from_raw(
+                            dst_image.width(),
+                            dst_image.height(),
+                            dst_image.into_vec(),
+                        )
+                        .unwrap(),
+                    )
                 })
                 .collect();
 
@@ -173,7 +152,7 @@ pub fn other(source: String, dest: String, name: String, config: Config) -> anyh
             }
 
             let meta = MetaData {
-                image: name.clone() + scale_suffix.as_str() + ".png",
+                image: format!("{name}{scale_suffix}.png"),
                 format: "RGBA8888".to_owned(),
                 size: Dimensions {
                     w: packed.w as u32,
@@ -183,12 +162,11 @@ pub fn other(source: String, dest: String, name: String, config: Config) -> anyh
             };
 
             let atlas_data = AtlasData { frames, meta };
-            std::fs::write(
-                Path::new(&dest).join(name.clone() + scale_suffix.as_str() + ".json"),
-                // serde_json::to_string(&atlas_data)?,
+            fs::write(
+                dest.as_ref().join(format!("{name}{scale_suffix}.json")),
                 atlas_data.serialize_json(),
             )?;
-            output.save(Path::new(&dest).join(name.clone() + scale_suffix.as_str() + ".png"))?;
+            output.save(dest.as_ref().join(format!("{name}{scale_suffix}.png")))?;
             Ok(())
         })?;
     // let end = Instant::now();
@@ -212,18 +190,10 @@ fn trim(img: &RgbaImage) -> (bool, LocationDimensions) {
 
             // Check alpha channel (index 3). 0 is fully transparent.
             if pixel.0[3] > 0 {
-                if x < min_x {
-                    min_x = x;
-                }
-                if x > max_x {
-                    max_x = x;
-                }
-                if y < min_y {
-                    min_y = y;
-                }
-                if y > max_y {
-                    max_y = y;
-                }
+                min_x = min_x.min(x);
+                min_y = min_y.min(y);
+                max_x = max_x.max(x);
+                max_y = max_y.max(y);
                 found_pixel = true;
             }
         }
@@ -249,7 +219,7 @@ fn trim(img: &RgbaImage) -> (bool, LocationDimensions) {
 }
 
 #[derive(Debug)]
-// #[serde(rename_all = "camelCase")]
+#[napi(object)]
 pub struct Config {
     // _pot: bool,
     pub padding_x: u32,
@@ -280,7 +250,6 @@ struct AtlasData {
 }
 
 #[derive(SerJson, Debug)]
-// #[serde(rename_all = "camelCase")]
 struct SpriteData {
     frame: LocationDimensions,
     rotated: bool,
