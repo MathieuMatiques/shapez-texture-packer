@@ -1,11 +1,10 @@
-#![feature(iterator_try_collect)]
 mod lib;
 use lib::{Config, other};
 
 fn main() {
     other(
-        "../res_raw".to_owned(),
-        "/tmp/atlas".to_owned(),
+        "../shapez-community-edition/res_raw",
+        "/tmp/atlas0",
         "atlas0".to_owned(),
         Config {
             padding_x: 2,
