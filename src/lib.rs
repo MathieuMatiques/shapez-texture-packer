@@ -28,7 +28,7 @@ fn hello(
     name: String,
     // config: Handle<JsObject>,
     config: Config,
-)  {
+) {
     // let config = Config {
     //     padding_x: config.prop(cx, "paddingX").get::<f64>()? as u32,
     //     padding_y: config.prop(cx, "paddingY").get::<f64>()? as u32,
@@ -61,7 +61,14 @@ fn hello(
     // Ok(())
 }
 
-pub fn other(source: String, dest: String, name: String, config: Config) -> anyhow::Result<()> {
+pub fn other<P: AsRef<Path> + Sync>(
+    source: P,
+    dest: P,
+    name: String,
+    config: Config,
+) -> anyhow::Result<()> {
+    std::fs::create_dir_all(&dest)?;
+
     // let start = Instant::now();
 
     // let config: Config = serde_json::from_str(&std::fs::read_to_string(&config)?)?;
@@ -187,11 +194,15 @@ pub fn other(source: String, dest: String, name: String, config: Config) -> anyh
 
             let atlas_data = AtlasData { frames, meta };
             std::fs::write(
-                Path::new(&dest).join(name.clone() + scale_suffix.as_str() + ".json"),
+                dest.as_ref()
+                    .join(name.clone() + scale_suffix.as_str() + ".json"),
                 // serde_json::to_string(&atlas_data)?,
                 atlas_data.serialize_json(),
             )?;
-            output.save(Path::new(&dest).join(name.clone() + scale_suffix.as_str() + ".png"))?;
+            output.save(
+                dest.as_ref()
+                    .join(name.clone() + scale_suffix.as_str() + ".png"),
+            )?;
             Ok(())
         })?;
     // let end = Instant::now();
