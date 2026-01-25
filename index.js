@@ -579,5 +579,5 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { hello } = nativeBinding
-export { hello }
+const { packTextures } = nativeBinding
+export { packTextures }

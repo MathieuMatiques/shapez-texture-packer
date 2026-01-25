@@ -10,20 +10,24 @@ use fast_image_resize::{
 use std::{collections::BTreeMap, fs, path::Path};
 use walkdir::WalkDir;
 
-#[napi]
-pub fn hello(source: String, dest: String, name: String, config: Config) {
-    other(source, dest, name, config).unwrap();
+/// Packs textures found in `source` using `config`. Outputs to `dest` with `name` as the start of the filename.
+#[napi(js_name = "packTextures")]
+pub fn js_pack_textures(
+    source: String,
+    dest: String,
+    name: String,
+    config: Config,
+) -> anyhow::Result<()> {
+    pack_textures(source, dest, name, config)
 }
 
-pub fn other<P: AsRef<Path> + Sync>(
+fn pack_textures<P: AsRef<Path> + Sync>(
     source: P,
     dest: P,
     name: String,
     config: Config,
 ) -> anyhow::Result<()> {
     fs::create_dir_all(&dest)?;
-
-    // let start = Instant::now();
 
     let sources: Vec<_> = WalkDir::new(&source)
         .into_iter()
@@ -169,8 +173,6 @@ pub fn other<P: AsRef<Path> + Sync>(
             output.save(dest.as_ref().join(format!("{name}{scale_suffix}.png")))?;
             Ok(())
         })?;
-    // let end = Instant::now();
-    // println!("{:?}", end - start);
 
     Ok(())
 }
@@ -221,24 +223,10 @@ fn trim(img: &RgbaImage) -> (bool, LocationDimensions) {
 #[derive(Debug)]
 #[napi(object)]
 pub struct Config {
-    // _pot: bool,
     pub padding_x: u32,
     pub padding_y: u32,
-    // _edge_padding: bool,
-    // _rotation: bool,
     pub max_width: u32,
     pub max_height: u32,
-    // _use_indexes: bool,
-    // _alpha_threshold: u8,
-    // _strip_whitespace_x: bool,
-    // _strip_whitespace_y: bool,
-    // duplicate_padding: bool,
-    // _alias: bool,
-    // _fast: bool,
-    // _limit_memory: bool,
-    // _combine_subdirectories: bool,
-    // _flatten_paths: bool,
-    // _bleed_iterations: u32,
     pub scale: Vec<f64>,
     pub scale_suffix: Vec<String>,
 }

@@ -9,4 +9,5 @@ export interface Config {
   scaleSuffix: Array<string>
 }
 
-export declare function hello(source: string, dest: string, name: string, config: Config): void
+/** Packs textures found in `source` using `config`. Outputs to `dest` with `name` as the start of the filename. */
+export declare function packTextures(source: string, dest: string, name: string, config: Config): void

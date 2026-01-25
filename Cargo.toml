@@ -14,7 +14,7 @@ nanoserde = { version = "0.2.1", default-features = false, features = ["json"] }
 # orx-parallel = "3.4.0"
 rayon = "1.11"
 walkdir = "2.5"
-napi = "3.0.0"
+napi = { version = "3.0.0", features = ["error_anyhow"] }
 napi-derive = "3.0.0"
 fast_image_resize = { version = "6.0.0", features = ["image", "only_u8x4"] }
 
