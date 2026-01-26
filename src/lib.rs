@@ -20,13 +20,13 @@ pub fn js_pack_textures(
     name: String,
     config: Config,
 ) -> anyhow::Result<()> {
-    pack_textures(source, dest, name, config)
+    pack_textures(source, dest, &name, config)
 }
 
 fn pack_textures<P: AsRef<Path> + Sync>(
     source: P,
     dest: P,
-    name: String,
+    name: &str,
     config: Config,
 ) -> anyhow::Result<()> {
     fs::create_dir_all(&dest)?;
@@ -38,7 +38,7 @@ fn pack_textures<P: AsRef<Path> + Sync>(
         .map(|e| e.into_path())
         .collect();
 
-    let (key_map, loaded_imgs): (Vec<String>, Vec<(RgbaImage, bool, LocationDimensions)>) = sources
+    let (loaded_imgs, key_map): (Vec<(RgbaImage, bool, LocationDimensions)>, Vec<String>) = sources
         .par_iter()
         .map(|path| -> anyhow::Result<_> {
             let img = ImageReader::open(path)?.decode()?.to_rgba8();
@@ -48,7 +48,7 @@ fn pack_textures<P: AsRef<Path> + Sync>(
                 .to_str()
                 .ok_or(anyhow!("Path not UTF8"))?
                 .to_owned();
-            Ok((key, (img, trimmed, trimmed_loc_dims)))
+            Ok(((img, trimmed, trimmed_loc_dims), key))
         })
         .collect::<anyhow::Result<_>>()?;
 
@@ -56,116 +56,15 @@ fn pack_textures<P: AsRef<Path> + Sync>(
         .collect::<Vec<_>>()
         .into_par_iter()
         .try_for_each(|(scale, scale_suffix)| -> anyhow::Result<()> {
-            let items = loaded_imgs.iter().enumerate().map(
-                |(i, (_, _, LocationDimensions { w, h, .. }))| {
-                    Item::new(
-                        i,
-                        (*w as f64 * scale).round() as usize + config.padding_x as usize,
-                        (*h as f64 * scale).round() as usize + config.padding_y as usize,
-                        Rotation::None,
-                    )
-                },
-            );
-            let packed = crunch::pack_into_po2(
-                std::cmp::min(config.max_width, config.max_height) as usize,
-                items,
-            )
-            .map_err(|_| {
-                anyhow!(
-                    "Failed to pack into {} x {}",
-                    config.max_width,
-                    config.max_height
-                )
-            })?;
-
-            let processed_sprites: Vec<_> = packed
-                .items
-                .into_par_iter()
-                .map(|item| {
-                    let (ref img, trimmed, ref trimmed_loc_dims) = loaded_imgs[item.data];
-
-                    let scaled_trimmed_loc_dims = LocationDimensions {
-                        x: (trimmed_loc_dims.x as f64 * scale).round() as u32,
-                        y: (trimmed_loc_dims.y as f64 * scale).round() as u32,
-                        w: (trimmed_loc_dims.w as f64 * scale).round() as u32,
-                        h: (trimmed_loc_dims.h as f64 * scale).round() as u32,
-                    };
-
-                    let sprite_data = SpriteData {
-                        frame: LocationDimensions {
-                            x: item.rect.x as u32 + config.padding_x / 2,
-                            y: item.rect.y as u32 + config.padding_y / 2,
-                            w: scaled_trimmed_loc_dims.w,
-                            h: scaled_trimmed_loc_dims.h,
-                        },
-                        rotated: false,
-                        trimmed,
-                        sprite_source_size: scaled_trimmed_loc_dims.clone(),
-                        source_size: Dimensions {
-                            w: (img.width() as f64 * scale).round() as u32,
-                            h: (img.height() as f64 * scale).round() as u32,
-                        },
-                    };
-
-                    let mut dst_image = Image::new(
-                        scaled_trimmed_loc_dims.w,
-                        scaled_trimmed_loc_dims.h,
-                        PixelType::U8x4,
-                    );
-                    let mut resizer = Resizer::new();
-                    resizer
-                        .resize_typed(
-                            &img.image_view::<U8x4>().unwrap(),
-                            &mut dst_image.typed_image_mut().unwrap(),
-                            &ResizeOptions::new()
-                                .crop(
-                                    trimmed_loc_dims.x as f64,
-                                    trimmed_loc_dims.y as f64,
-                                    trimmed_loc_dims.w as f64,
-                                    trimmed_loc_dims.h as f64,
-                                )
-                                .resize_alg(ResizeAlg::Convolution(FilterType::Bilinear)),
-                        )
-                        .unwrap();
-
-                    (
-                        item.data,
-                        sprite_data,
-                        ImageBuffer::from_raw(
-                            dst_image.width(),
-                            dst_image.height(),
-                            dst_image.into_vec(),
-                        )
-                        .unwrap(),
-                    )
-                })
-                .collect();
-
-            let mut output = RgbaImage::new(packed.w as u32, packed.h as u32);
-
-            let mut frames = BTreeMap::new();
-
-            for (i, sprite_data, downsized) in processed_sprites {
-                imageops::replace(
-                    &mut output,
-                    &downsized,
-                    sprite_data.frame.x as i64,
-                    sprite_data.frame.y as i64,
-                );
-                frames.insert(key_map[i].clone(), sprite_data);
-            }
-
-            let meta = MetaData {
-                image: format!("{name}{scale_suffix}.png"),
-                format: "RGBA8888".to_owned(),
-                size: Dimensions {
-                    w: packed.w as u32,
-                    h: packed.h as u32,
-                },
-                scale: scale.to_string(),
-            };
-
-            let atlas_data = AtlasData { frames, meta };
+            let (output, atlas_data) = make_atlas(
+                &loaded_imgs,
+                &key_map,
+                scale,
+                &scale_suffix,
+                &name,
+                (config.padding_x, config.padding_y),
+                (config.max_width, config.max_height),
+            )?;
             fs::write(
                 dest.as_ref().join(format!("{name}{scale_suffix}.json")),
                 atlas_data.serialize_json(),
@@ -175,6 +74,118 @@ fn pack_textures<P: AsRef<Path> + Sync>(
         })?;
 
     Ok(())
+}
+
+fn make_atlas(
+    loaded_imgs: &[(RgbaImage, bool, LocationDimensions)],
+    key_map: &[String],
+    scale: f64,
+    scale_suffix: &str,
+    name: &str,
+    padding: (u32, u32),
+    max_dims: (u32, u32),
+) -> anyhow::Result<(RgbaImage, AtlasData)> {
+    let items =
+        loaded_imgs
+            .iter()
+            .enumerate()
+            .map(|(i, (_, _, LocationDimensions { w, h, .. }))| {
+                Item::new(
+                    i,
+                    (*w as f64 * scale).round() as usize + padding.0 as usize,
+                    (*h as f64 * scale).round() as usize + padding.1 as usize,
+                    Rotation::None,
+                )
+            });
+    let packed = crunch::pack_into_po2(std::cmp::min(max_dims.0, max_dims.1) as usize, items)
+        .map_err(|_| anyhow!("Failed to pack into {} x {}", max_dims.0, max_dims.1))?;
+
+    let processed_sprites: Vec<_> = packed
+        .items
+        .into_par_iter()
+        .map(|item| {
+            let (ref img, trimmed, ref trimmed_loc_dims) = loaded_imgs[item.data];
+
+            let scaled_trimmed_loc_dims = LocationDimensions {
+                x: (trimmed_loc_dims.x as f64 * scale).round() as u32,
+                y: (trimmed_loc_dims.y as f64 * scale).round() as u32,
+                w: (trimmed_loc_dims.w as f64 * scale).round() as u32,
+                h: (trimmed_loc_dims.h as f64 * scale).round() as u32,
+            };
+
+            let sprite_data = SpriteData {
+                frame: LocationDimensions {
+                    x: item.rect.x as u32 + padding.0 / 2,
+                    y: item.rect.y as u32 + padding.1 / 2,
+                    w: scaled_trimmed_loc_dims.w,
+                    h: scaled_trimmed_loc_dims.h,
+                },
+                rotated: false,
+                trimmed,
+                sprite_source_size: scaled_trimmed_loc_dims.clone(),
+                source_size: Dimensions {
+                    w: (img.width() as f64 * scale).round() as u32,
+                    h: (img.height() as f64 * scale).round() as u32,
+                },
+            };
+
+            let mut dst_image = Image::new(
+                scaled_trimmed_loc_dims.w,
+                scaled_trimmed_loc_dims.h,
+                PixelType::U8x4,
+            );
+            let mut resizer = Resizer::new();
+            resizer
+                .resize_typed(
+                    &img.image_view::<U8x4>().unwrap(),
+                    &mut dst_image.typed_image_mut().unwrap(),
+                    &ResizeOptions::new()
+                        .crop(
+                            trimmed_loc_dims.x as f64,
+                            trimmed_loc_dims.y as f64,
+                            trimmed_loc_dims.w as f64,
+                            trimmed_loc_dims.h as f64,
+                        )
+                        .resize_alg(ResizeAlg::Convolution(FilterType::Bilinear)),
+                )
+                .unwrap();
+
+            (
+                item.data,
+                sprite_data,
+                ImageBuffer::from_raw(dst_image.width(), dst_image.height(), dst_image.into_vec())
+                    .unwrap(),
+            )
+        })
+        .collect();
+
+    let mut output = RgbaImage::new(packed.w as u32, packed.h as u32);
+
+    let mut frames = BTreeMap::new();
+
+    for (i, sprite_data, downsized) in processed_sprites {
+        imageops::replace(
+            &mut output,
+            &downsized,
+            sprite_data.frame.x as i64,
+            sprite_data.frame.y as i64,
+        );
+        frames.insert(key_map[i].clone(), sprite_data);
+    }
+
+    let meta = MetaData {
+        image: format!("{name}{scale_suffix}.png"),
+        format: "RGBA8888".to_owned(),
+        size: Dimensions {
+            w: packed.w as u32,
+            h: packed.h as u32,
+        },
+        scale: scale.to_string(),
+    };
+
+    let atlas_data = AtlasData { frames, meta };
+
+    Ok((output, atlas_data))
 }
 
 fn trim(img: &RgbaImage) -> (bool, LocationDimensions) {
