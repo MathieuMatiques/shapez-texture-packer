@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use crunch::{Item, Rotation};
 use image::{ImageBuffer, ImageReader, RgbaImage, imageops};
 use nanoserde::SerJson;
@@ -38,8 +39,8 @@ fn pack_textures<P: AsRef<Path> + Sync>(
 
     let loaded_imgs: BTreeMap<String, (RgbaImage, bool, LocationDimensions)> = sources
         .par_iter()
-        .map(|path| {
-            let img = ImageReader::open(&path).unwrap().decode().unwrap();
+        .map(|path| -> anyhow::Result<_> {
+            let img = ImageReader::open(&path)?.decode()?;
             let img = if let Some(rgba8) = img.as_rgba8() {
                 rgba8.to_owned()
             } else {
@@ -47,14 +48,13 @@ fn pack_textures<P: AsRef<Path> + Sync>(
             };
             let (trimmed, trimmed_loc_dims) = trim(&img);
             let key = path
-                .strip_prefix(&source)
-                .unwrap()
+                .strip_prefix(&source)?
                 .to_str()
-                .unwrap()
+                .ok_or(anyhow!("Path not UTF8"))?
                 .to_owned();
-            (key, (img, trimmed, trimmed_loc_dims))
+            Ok((key, (img, trimmed, trimmed_loc_dims)))
         })
-        .collect();
+        .collect::<anyhow::Result<_>>()?;
 
     std::iter::zip(config.scale, config.scale_suffix)
         .collect::<Vec<_>>()
@@ -71,10 +71,16 @@ fn pack_textures<P: AsRef<Path> + Sync>(
                     )
                 });
             let packed = crunch::pack_into_po2(
-                std::cmp::max(config.max_width, config.max_height) as usize,
+                std::cmp::min(config.max_width, config.max_height) as usize,
                 items,
             )
-            .expect("Failed to pack");
+            .map_err(|_| {
+                anyhow!(
+                    "Failed to pack into {} x {}",
+                    config.max_width,
+                    config.max_height
+                )
+            })?;
 
             let processed_sprites: Vec<_> = packed
                 .items
@@ -183,30 +189,17 @@ fn trim(img: &RgbaImage) -> (bool, LocationDimensions) {
     let mut min_y = height;
     let mut max_x = 0;
     let mut max_y = 0;
-    let mut found_pixel = false;
 
-    // 1. Scan for the bounding box of non-transparent pixels
-    for y in 0..height {
-        for x in 0..width {
-            let pixel = img.get_pixel(x, y);
-
-            // Check alpha channel (index 3). 0 is fully transparent.
-            if pixel.0[3] > 0 {
-                min_x = min_x.min(x);
-                min_y = min_y.min(y);
-                max_x = max_x.max(x);
-                max_y = max_y.max(y);
-                found_pixel = true;
-            }
+    for (x, y, pixel) in img.enumerate_pixels() {
+        // Check alpha channel
+        if pixel.0[3] != 0 {
+            min_x = min_x.min(x);
+            min_y = min_y.min(y);
+            max_x = max_x.max(x);
+            max_y = max_y.max(y);
         }
     }
 
-    // 2. Handle fully transparent images (return a 1x1 empty view at 0,0)
-    if !found_pixel {
-        panic!("all transparent!");
-    }
-
-    // 3. Calculate new dimensions
     let new_width = max_x - min_x + 1;
     let new_height = max_y - min_y + 1;
     (
