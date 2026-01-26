@@ -6,7 +6,8 @@ use napi_derive::napi;
 use rayon::prelude::*;
 // use orx_parallel::*;
 use fast_image_resize::{
-    IntoImageView, PixelType, ResizeAlg, ResizeOptions, Resizer, images::Image, pixels::U8x4,
+    FilterType, IntoImageView, PixelType, ResizeAlg, ResizeOptions, Resizer, images::Image,
+    pixels::U8x4,
 };
 use std::{collections::BTreeMap, fs, path::Path};
 use walkdir::WalkDir;
@@ -37,15 +38,10 @@ fn pack_textures<P: AsRef<Path> + Sync>(
         .map(|e| e.into_path())
         .collect();
 
-    let loaded_imgs: BTreeMap<String, (RgbaImage, bool, LocationDimensions)> = sources
+    let (key_map, loaded_imgs): (Vec<String>, Vec<(RgbaImage, bool, LocationDimensions)>) = sources
         .par_iter()
         .map(|path| -> anyhow::Result<_> {
-            let img = ImageReader::open(&path)?.decode()?;
-            let img = if let Some(rgba8) = img.as_rgba8() {
-                rgba8.to_owned()
-            } else {
-                img.to_rgba8()
-            };
+            let img = ImageReader::open(path)?.decode()?.to_rgba8();
             let (trimmed, trimmed_loc_dims) = trim(&img);
             let key = path
                 .strip_prefix(&source)?
@@ -60,16 +56,16 @@ fn pack_textures<P: AsRef<Path> + Sync>(
         .collect::<Vec<_>>()
         .into_par_iter()
         .try_for_each(|(scale, scale_suffix)| -> anyhow::Result<()> {
-            let items = loaded_imgs
-                .iter()
-                .map(|(key, (_, _, LocationDimensions { w, h, .. }))| {
+            let items = loaded_imgs.iter().enumerate().map(
+                |(i, (_, _, LocationDimensions { w, h, .. }))| {
                     Item::new(
-                        key.clone(),
+                        i,
                         (*w as f64 * scale).round() as usize + config.padding_x as usize,
                         (*h as f64 * scale).round() as usize + config.padding_y as usize,
                         Rotation::None,
                     )
-                });
+                },
+            );
             let packed = crunch::pack_into_po2(
                 std::cmp::min(config.max_width, config.max_height) as usize,
                 items,
@@ -86,7 +82,7 @@ fn pack_textures<P: AsRef<Path> + Sync>(
                 .items
                 .into_par_iter()
                 .map(|item| {
-                    let (ref img, trimmed, ref trimmed_loc_dims) = loaded_imgs[&item.data];
+                    let (ref img, trimmed, ref trimmed_loc_dims) = loaded_imgs[item.data];
 
                     let scaled_trimmed_loc_dims = LocationDimensions {
                         x: (trimmed_loc_dims.x as f64 * scale).round() as u32,
@@ -128,9 +124,7 @@ fn pack_textures<P: AsRef<Path> + Sync>(
                                     trimmed_loc_dims.w as f64,
                                     trimmed_loc_dims.h as f64,
                                 )
-                                .resize_alg(ResizeAlg::Convolution(
-                                    fast_image_resize::FilterType::Bilinear,
-                                )),
+                                .resize_alg(ResizeAlg::Convolution(FilterType::Bilinear)),
                         )
                         .unwrap();
 
@@ -151,14 +145,14 @@ fn pack_textures<P: AsRef<Path> + Sync>(
 
             let mut frames = BTreeMap::new();
 
-            for (key, sprite_data, downsized) in processed_sprites {
+            for (i, sprite_data, downsized) in processed_sprites {
                 imageops::replace(
                     &mut output,
                     &downsized,
                     sprite_data.frame.x as i64,
                     sprite_data.frame.y as i64,
                 );
-                frames.insert(key, sprite_data);
+                frames.insert(key_map[i].clone(), sprite_data);
             }
 
             let meta = MetaData {
